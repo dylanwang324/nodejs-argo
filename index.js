@@ -16,7 +16,7 @@ const AUTO_ACCESS = process.env.AUTO_ACCESS || false;
 const FILE_PATH = process.env.FILE_PATH || '.npm';
 const SUB_PATH = process.env.SUB_PATH || 'sub';
 const PORT = process.env.SERVER_PORT || process.env.PORT || 3000;
-const UUID = process.env.UUID || '7b671c80-964f-4821-b4f0-48e167353331';
+const UUID = process.env.UUID || 'c0ad896f-d4fa-46c3-a2f6-2592efd8049b';
 const NEZHA_SERVER = process.env.NEZHA_SERVER || '';
 const NEZHA_PORT = process.env.NEZHA_PORT || '';
 const NEZHA_KEY = process.env.NEZHA_KEY || '';
@@ -35,6 +35,7 @@ const SHOW_LOG = !['false', 'disable', 'no'].includes(
   (process.env.SHOW_LOG || 'true').toLowerCase()
 );
 
+// 控制日志输出
 if (!SHOW_LOG) {
   console.log = () => {};
   console.error = () => {};
@@ -44,10 +45,12 @@ function alwaysLog(msg) {
   process.stdout.write(msg + '\n');
 }
 
+// 创建运行文件夹
 if (!fs.existsSync(FILE_PATH)) {
-  fs.mkdirSync(FILE_PATH);
+  fs.mkdirSync(FILE_PATH, { recursive: true });
 }
 
+// 端口检查
 function isValidPort(port) {
   try {
     if (port === null || port === undefined || port === '') return false;
@@ -64,6 +67,7 @@ function isValidPort(port) {
   }
 }
 
+// 生成随机6位字符
 function generateRandomName() {
   const characters = 'abcdefghijklmnopqrstuvwxyz';
   let result = '';
@@ -77,6 +81,7 @@ function generateRandomName() {
   return result;
 }
 
+// 全局变量
 let subContent = null;
 let privateKey = '';
 let publicKey = '';
@@ -99,6 +104,7 @@ let configPath = path.join(FILE_PATH, 'config.json');
 let certPath = path.resolve(FILE_PATH, 'cert.pem');
 let keyPath = path.resolve(FILE_PATH, 'private.key');
 
+// 如果订阅器上存在历史运行节点则先删除
 function deleteNodes() {
   try {
     if (!UPLOAD_URL) return;
@@ -139,6 +145,7 @@ function deleteNodes() {
   }
 }
 
+// 清理历史文件
 function cleanupOldFiles() {
   try {
     const files = fs.readdirSync(FILE_PATH);
@@ -152,15 +159,20 @@ function cleanupOldFiles() {
         if (stat.isFile()) {
           fs.unlinkSync(filePath);
         }
+
       } catch (err) {
+        // 忽略错误
       }
     });
 
   } catch (err) {
+    // 忽略错误
   }
 }
 
+// crypto 生成 X25519 密钥对
 function generateX25519Keypair() {
+
   const {
     publicKey: pubKey,
     privateKey: privKey
@@ -186,7 +198,9 @@ function generateX25519Keypair() {
   };
 }
 
+// X25519 密钥对生成或加载
 function generateOrLoadKeyPair() {
+
   const keyFilePath = path.join(FILE_PATH, 'key.txt');
 
   if (fs.existsSync(keyFilePath)) {
@@ -204,34 +218,20 @@ function generateOrLoadKeyPair() {
 
     if (privateKeyMatch && publicKeyMatch) {
 
-      privateKey =
-        privateKeyMatch[1].trim();
+      privateKey = privateKeyMatch[1].trim();
+      publicKey = publicKeyMatch[1].trim();
 
-      publicKey =
-        publicKeyMatch[1].trim();
-
-      console.log(
-        'Private Key:',
-        privateKey
-      );
-
-      console.log(
-        'Public Key:',
-        publicKey
-      );
+      console.log('Private Key:', privateKey);
+      console.log('Public Key:', publicKey);
 
       return;
     }
   }
 
-  const keypair =
-    generateX25519Keypair();
+  const keypair = generateX25519Keypair();
 
-  privateKey =
-    keypair.privateKey;
-
-  publicKey =
-    keypair.publicKey;
+  privateKey = keypair.privateKey;
+  publicKey = keypair.publicKey;
 
   fs.writeFileSync(
     keyFilePath,
@@ -239,17 +239,11 @@ function generateOrLoadKeyPair() {
     'utf8'
   );
 
-  console.log(
-    'Private Key:',
-    privateKey
-  );
-
-  console.log(
-    'Public Key:',
-    publicKey
-  );
+  console.log('Private Key:', privateKey);
+  console.log('Public Key:', publicKey);
 }
 
+// TLS 证书生成
 const FALLBACK_EC_KEY =
   '-----BEGIN EC PARAMETERS-----\n' +
   'BggqhkjOPQMBBw==\n' +
@@ -274,46 +268,36 @@ const FALLBACK_CERT =
 
 function ensureTlsCertificates(certPath, keyPath) {
 
-  if (
-    fs.existsSync(certPath) &&
-    fs.existsSync(keyPath)
-  ) {
+  if (fs.existsSync(certPath) && fs.existsSync(keyPath)) {
     return;
   }
 
   fs.mkdirSync(
     path.dirname(certPath),
-    {
-      recursive: true
-    }
+    { recursive: true }
   );
 
   try {
 
     execSync(
       'openssl version',
-      {
-        stdio: 'ignore'
-      }
+      { stdio: 'ignore' }
     );
 
     execSync(
       `openssl ecparam -genkey -name prime256v1 -out "${keyPath}"`,
-      {
-        stdio: 'ignore'
-      }
+      { stdio: 'ignore' }
     );
 
     execSync(
       `openssl req -new -x509 -days 3650 -key "${keyPath}" -out "${certPath}" -subj "/CN=bing.com"`,
-      {
-        stdio: 'ignore'
-      }
+      { stdio: 'ignore' }
     );
 
     return;
 
   } catch (e) {
+    // openssl 不可用
   }
 
   fs.writeFileSync(
@@ -327,39 +311,33 @@ function ensureTlsCertificates(certPath, keyPath) {
   );
 }
 
+// 计算证书 SHA-256 指纹
 function getCertificateFingerprint(certPath) {
 
   try {
 
-    const result =
-      execSync(
-        `openssl x509 -noout -fingerprint -sha256 -in "${certPath}"`,
-        {
-          encoding: 'utf8',
-          timeout: 3000
-        }
-      ).trim();
+    const result = execSync(
+      `openssl x509 -noout -fingerprint -sha256 -in "${certPath}"`,
+      {
+        encoding: 'utf8',
+        timeout: 3000
+      }
+    ).trim();
 
-    const match =
-      result.match(/=(.+)$/);
+    const match = result.match(/=(.+)$/);
 
-    if (
-      match &&
-      match[1]
-    ) {
+    if (match && match[1]) {
       return match[1].toUpperCase();
     }
 
   } catch (e) {
+    // openssl 不可用
   }
 
   try {
 
     const certData =
-      fs.readFileSync(
-        certPath,
-        'utf8'
-      );
+      fs.readFileSync(certPath, 'utf8');
 
     const derMatch =
       certData.match(
@@ -372,10 +350,7 @@ function getCertificateFingerprint(certPath) {
       derMatch[1].replace(/\s/g, '');
 
     const derBuffer =
-      Buffer.from(
-        derBase64,
-        'base64'
-      );
+      Buffer.from(derBase64, 'base64');
 
     const hash =
       crypto
@@ -399,50 +374,79 @@ function getCertificateFingerprint(certPath) {
   }
 }
 
+// 生成 Xray 配置
 async function generateConfig() {
 
   const config = {
 
+    // 不再把 Xray 错误全部丢弃
+    // 便于镜像启动失败时排查
     log: {
       access: '/dev/null',
-      error: '/dev/null',
-      loglevel: 'none'
+      error: path.join(FILE_PATH, 'xray-error.log'),
+      loglevel: 'warning'
     },
 
     inbounds: [
 
+      // ============================================================
+      // Cloudflare Argo
+      // VLESS + XHTTP
+      //
+      // Cloudflare Tunnel:
+      // https://ARGO_DOMAIN
+      //
+      // -> localhost:ARGO_PORT
+      //
+      // Xray:
+      // VLESS + XHTTP
+      // ============================================================
       {
         tag: 'vless-xhttp-argo-in',
-        port: ARGO_PORT,
+
+        port: parseInt(ARGO_PORT),
+
         listen: '::',
+
         protocol: 'vless',
 
         settings: {
+
           clients: [
             {
               id: UUID
             }
           ],
+
           decryption: 'none'
         },
 
         streamSettings: {
+
           network: 'xhttp',
+
+          // Cloudflare Tunnel 到这里是 HTTP
+          // TLS 由 Cloudflare 边缘处理
           security: 'none',
 
           xhttpSettings: {
+
             path: '/xhttp-argo',
+
             mode: 'auto'
           }
         },
 
         sniffing: {
+
           enabled: true,
+
           destOverride: [
             'http',
             'tls',
             'quic'
           ],
+
           metadataOnly: false
         }
       }
@@ -451,89 +455,118 @@ async function generateConfig() {
 
     dns: {
       servers: [
-        'https+local://8.8.8.8/dns-query'
+        "https+local://8.8.8.8/dns-query"
       ]
     },
 
     outbounds: [
+
       {
-        protocol: 'freedom',
-        tag: 'direct'
+        protocol: "freedom",
+        tag: "direct"
       },
+
       {
-        protocol: 'blackhole',
-        tag: 'block'
+        protocol: "blackhole",
+        tag: "block"
       }
+
     ]
   };
 
+  // ============================================================
+  // VLESS + XHTTP + REALITY
+  //
+  // 注意：
+  // XHTTP + REALITY 不使用 xtls-rprx-vision
+  // ============================================================
   if (isValidPort(REALITY_PORT)) {
 
     config.inbounds.push({
 
-      tag: 'vless-xhttp-reality-in',
+      tag: "vless-xhttp-reality-in",
 
-      listen: '::',
+      listen: "::",
 
       port: parseInt(REALITY_PORT),
 
-      protocol: 'vless',
+      protocol: "vless",
 
       settings: {
 
         clients: [
+
           {
             id: UUID
           }
+
         ],
 
-        decryption: 'none'
+        decryption: "none"
       },
 
       streamSettings: {
 
-        network: 'xhttp',
+        network: "xhttp",
 
-        security: 'reality',
+        security: "reality",
 
         xhttpSettings: {
-          path: '/xhttp-reality',
-          mode: 'auto'
+
+          path: "/xhttp-reality",
+
+          mode: "auto"
         },
 
         realitySettings: {
 
           show: false,
 
-          dest: 'www.iij.ad.jp:443',
+          dest: "www.iij.ad.jp:443",
 
           xver: 0,
 
           serverNames: [
-            'www.iij.ad.jp'
+            "www.iij.ad.jp"
           ],
 
           privateKey: privateKey,
 
           shortIds: [
-            ''
+            ""
           ]
         }
+      },
+
+      sniffing: {
+
+        enabled: true,
+
+        destOverride: [
+          "http",
+          "tls",
+          "quic"
+        ],
+
+        metadataOnly: false
       }
     });
   }
 
+  // ============================================================
+  // Hysteria2
+  // ============================================================
   if (isValidPort(HY2_PORT)) {
 
     config.inbounds.push({
 
-      tag: 'hysteria-in',
+      tag: "hysteria-in",
 
-      listen: '::',
+      listen: "::",
 
       port: parseInt(HY2_PORT),
 
-      protocol: 'hysteria',
+      protocol: "hysteria",
 
       settings: {
 
@@ -548,58 +581,68 @@ async function generateConfig() {
 
       streamSettings: {
 
-        network: 'hysteria',
+        network: "hysteria",
 
         hysteriaSettings: {
 
           version: 2,
 
           masquerade: {
-            type: 'proxy',
-            url: 'https://bing.com'
+
+            type: "proxy",
+
+            url: "https://bing.com"
           }
         },
 
-        security: 'tls',
+        security: "tls",
 
         tlsSettings: {
 
           alpn: [
-            'h3'
+            "h3"
           ],
 
           certificates: [
+
             {
               certificateFile: certPath,
               keyFile: keyPath
             }
+
           ]
         }
       }
     });
   }
 
+  // ============================================================
+  // SOCKS5
+  // ============================================================
   if (isValidPort(S5_PORT)) {
 
     config.inbounds.push({
 
-      tag: 's5-in',
+      tag: "s5-in",
 
-      listen: '::',
+      listen: "::",
 
       port: parseInt(S5_PORT),
 
-      protocol: 'socks',
+      protocol: "socks",
 
       settings: {
 
-        auth: 'password',
+        auth: "password",
 
         accounts: [
+
           {
             user: UUID.substring(0, 8),
+
             pass: UUID.slice(-12)
           }
+
         ],
 
         udp: true
@@ -613,6 +656,7 @@ async function generateConfig() {
   );
 }
 
+// 判断系统架构
 function getSystemArchitecture() {
 
   const arch = os.arch();
@@ -622,12 +666,16 @@ function getSystemArchitecture() {
     arch === 'arm64' ||
     arch === 'aarch64'
   ) {
-    return 'arm';
-  }
 
-  return 'amd';
+    return 'arm';
+
+  } else {
+
+    return 'amd';
+  }
 }
 
+// 下载文件
 function downloadFile(
   fileName,
   fileUrl,
@@ -643,99 +691,85 @@ function downloadFile(
 
     fs.mkdirSync(
       FILE_PATH,
-      {
-        recursive: true
-      }
+      { recursive: true }
     );
   }
 
   const writer =
-    fs.createWriteStream(
-      tempFilePath
-    );
+    fs.createWriteStream(tempFilePath);
 
   axios({
+
     method: 'get',
+
     url: fileUrl,
+
     responseType: 'stream'
+
   })
 
-  .then(response => {
+    .then(response => {
 
-    response.data.pipe(writer);
+      response.data.pipe(writer);
 
-    writer.on(
-      'finish',
-      () => {
+      writer.on('finish', () => {
 
-        writer.close(
-          closeError => {
+        writer.close(closeError => {
 
-            if (closeError) {
+          if (closeError) {
 
-              const errorMessage =
-                `Download ${path.basename(filePath)} failed: ${closeError.message}`;
+            const errorMessage =
+              `Download ${path.basename(filePath)} failed: ${closeError.message}`;
 
-              fs.unlink(
-                tempFilePath,
-                () => {}
-              );
-
-              console.error(
-                errorMessage
-              );
-
-              callback(
-                errorMessage
-              );
-
-              return;
-            }
-
-            try {
-
-              fs.renameSync(
-                tempFilePath,
-                filePath
-              );
-
-            } catch (renameError) {
-
-              const errorMessage =
-                `Download ${path.basename(filePath)} failed: ${renameError.message}`;
-
-              fs.unlink(
-                tempFilePath,
-                () => {}
-              );
-
-              console.error(
-                errorMessage
-              );
-
-              callback(
-                errorMessage
-              );
-
-              return;
-            }
-
-            console.log(
-              `Download ${path.basename(filePath)} successfully`
+            fs.unlink(
+              tempFilePath,
+              () => {}
             );
 
-            callback(
-              null,
+            console.error(errorMessage);
+
+            callback(errorMessage);
+
+            return;
+          }
+
+          try {
+
+            fs.renameSync(
+              tempFilePath,
               filePath
             );
-          }
-        );
-      }
-    );
 
-    writer.on(
-      'error',
-      err => {
+          } catch (renameError) {
+
+            const errorMessage =
+              `Download ${path.basename(filePath)} failed: ${renameError.message}`;
+
+            fs.unlink(
+              tempFilePath,
+              () => {}
+            );
+
+            console.error(errorMessage);
+
+            callback(errorMessage);
+
+            return;
+          }
+
+          console.log(
+            `Download ${path.basename(filePath)} successfully`
+          );
+
+          callback(
+            null,
+            filePath
+          );
+
+        });
+      });
+
+      writer.on('error', err => {
 
         fs.unlink(
           tempFilePath,
@@ -745,38 +779,30 @@ function downloadFile(
         const errorMessage =
           `Download ${path.basename(filePath)} failed: ${err.message}`;
 
-        console.error(
-          errorMessage
-        );
+        console.error(errorMessage);
 
-        callback(
-          errorMessage
-        );
-      }
-    );
+        callback(errorMessage);
+      });
 
-  })
+    })
 
-  .catch(err => {
+    .catch(err => {
 
-    fs.unlink(
-      tempFilePath,
-      () => {}
-    );
+      fs.unlink(
+        tempFilePath,
+        () => {}
+      );
 
-    const errorMessage =
-      `Download ${path.basename(filePath)} failed: ${err.message}`;
+      const errorMessage =
+        `Download ${path.basename(filePath)} failed: ${err.message}`;
 
-    console.error(
-      errorMessage
-    );
+      console.error(errorMessage);
 
-    callback(
-      errorMessage
-    );
-  });
+      callback(errorMessage);
+    });
 }
 
+// 下载并运行依赖文件
 async function downloadFilesAndRun() {
 
   const architecture =
@@ -787,9 +813,7 @@ async function downloadFilesAndRun() {
       architecture
     );
 
-  if (
-    filesToDownload.length === 0
-  ) {
+  if (filesToDownload.length === 0) {
 
     console.log(
       `Can't find a file for the current architecture`
@@ -799,55 +823,49 @@ async function downloadFilesAndRun() {
   }
 
   const downloadPromises =
-    filesToDownload.map(
-      fileInfo => {
+    filesToDownload.map(fileInfo => {
 
-        return new Promise(
-          (resolve, reject) => {
+      return new Promise((resolve, reject) => {
 
-            const tryDownload =
-              urlIndex => {
+        const tryDownload =
+          urlIndex => {
 
-                downloadFile(
-                  fileInfo.fileName,
-                  fileInfo.fileUrls[urlIndex],
-                  (err, filePath) => {
+            downloadFile(
+              fileInfo.fileName,
+              fileInfo.fileUrls[urlIndex],
+              (err, filePath) => {
 
-                    if (!err) {
+                if (!err) {
 
-                      resolve(
-                        filePath
-                      );
+                  resolve(filePath);
 
-                      return;
-                    }
+                  return;
+                }
 
-                    if (
-                      urlIndex + 1 <
-                      fileInfo.fileUrls.length
-                    ) {
+                if (
+                  urlIndex + 1 <
+                  fileInfo.fileUrls.length
+                ) {
 
-                      console.log(
-                        `Retrying ${path.basename(fileInfo.fileName)} from backup source`
-                      );
+                  console.log(
+                    `Retrying ${path.basename(fileInfo.fileName)} from backup source`
+                  );
 
-                      tryDownload(
-                        urlIndex + 1
-                      );
+                  tryDownload(
+                    urlIndex + 1
+                  );
 
-                      return;
-                    }
+                  return;
+                }
 
-                    reject(err);
-                  }
-                );
-              };
+                reject(err);
+              }
+            );
+          };
 
-            tryDownload(0);
-          }
-        );
-      }
-    );
+        tryDownload(0);
+      });
+    });
 
   try {
 
@@ -867,8 +885,7 @@ async function downloadFilesAndRun() {
 
   function authorizeFiles(filePaths) {
 
-    const newPermissions =
-      0o775;
+    const newPermissions = 0o775;
 
     filePaths.forEach(
       absoluteFilePath => {
@@ -910,6 +927,9 @@ async function downloadFilesAndRun() {
     filesToAuthorize
   );
 
+  // ============================================================
+  // 运行哪吒
+  // ============================================================
   if (
     NEZHA_SERVER &&
     NEZHA_KEY
@@ -959,10 +979,7 @@ use_ipv6_country_code: false
 uuid: ${UUID}`;
 
       fs.writeFileSync(
-        path.join(
-          FILE_PATH,
-          'config.yaml'
-        ),
+        path.join(FILE_PATH, 'config.yaml'),
         configYaml
       );
 
@@ -971,9 +988,7 @@ uuid: ${UUID}`;
 
       try {
 
-        await exec(
-          command
-        );
+        await exec(command);
 
         console.log(
           `${phpName} is running`
@@ -981,10 +996,7 @@ uuid: ${UUID}`;
 
         await new Promise(
           resolve =>
-            setTimeout(
-              resolve,
-              1000
-            )
+            setTimeout(resolve, 1000)
         );
 
       } catch (error) {
@@ -1012,6 +1024,7 @@ uuid: ${UUID}`;
           NEZHA_PORT
         )
       ) {
+
         NEZHA_TLS = '--tls';
       }
 
@@ -1020,9 +1033,7 @@ uuid: ${UUID}`;
 
       try {
 
-        await exec(
-          command
-        );
+        await exec(command);
 
         console.log(
           `${npmName} is running`
@@ -1030,10 +1041,7 @@ uuid: ${UUID}`;
 
         await new Promise(
           resolve =>
-            setTimeout(
-              resolve,
-              1000
-            )
+            setTimeout(resolve, 1000)
         );
 
       } catch (error) {
@@ -1051,14 +1059,15 @@ uuid: ${UUID}`;
     );
   }
 
+  // ============================================================
+  // 运行 Xray
+  // ============================================================
   const command1 =
     `nohup ${webPath} -c ${FILE_PATH}/config.json >/dev/null 2>&1 &`;
 
   try {
 
-    await exec(
-      command1
-    );
+    await exec(command1);
 
     console.log(
       `${webName} is running`
@@ -1066,10 +1075,7 @@ uuid: ${UUID}`;
 
     await new Promise(
       resolve =>
-        setTimeout(
-          resolve,
-          1000
-        )
+        setTimeout(resolve, 1000)
     );
 
   } catch (error) {
@@ -1079,6 +1085,9 @@ uuid: ${UUID}`;
     );
   }
 
+  // ============================================================
+  // 运行 Cloudflare Tunnel
+  // ============================================================
   if (
     fs.existsSync(botPath)
   ) {
@@ -1095,9 +1104,7 @@ uuid: ${UUID}`;
         `tunnel --edge-ip-version auto --no-autoupdate --protocol http2 run --token ${ARGO_AUTH}`;
 
     } else if (
-      ARGO_AUTH.match(
-        /TunnelSecret/
-      )
+      ARGO_AUTH.match(/TunnelSecret/)
     ) {
 
       args =
@@ -1121,10 +1128,7 @@ uuid: ${UUID}`;
 
       await new Promise(
         resolve =>
-          setTimeout(
-            resolve,
-            2000
-          )
+          setTimeout(resolve, 2000)
       );
 
     } catch (error) {
@@ -1137,13 +1141,11 @@ uuid: ${UUID}`;
 
   await new Promise(
     resolve =>
-      setTimeout(
-        resolve,
-        5000
-      )
+      setTimeout(resolve, 5000)
   );
 }
 
+// 根据系统架构返回 URL
 function getFilesForArchitecture(
   architecture
 ) {
@@ -1162,6 +1164,7 @@ function getFilesForArchitecture(
 
     {
       fileName: webPath,
+
       fileUrls: [
         `${baseUrl}/web`,
         `${backupUrl}/web`
@@ -1170,6 +1173,7 @@ function getFilesForArchitecture(
 
     {
       fileName: botPath,
+
       fileUrls: [
         `${baseUrl}/bot`,
         `${backupUrl}/bot`
@@ -1193,6 +1197,7 @@ function getFilesForArchitecture(
           `${baseUrl}/agent`,
           `${backupUrl}/agent`
         ]
+
       });
 
     } else {
@@ -1205,6 +1210,7 @@ function getFilesForArchitecture(
           `${baseUrl}/v1`,
           `${backupUrl}/v1`
         ]
+
       });
     }
   }
@@ -1212,6 +1218,7 @@ function getFilesForArchitecture(
   return baseFiles;
 }
 
+// 获取固定隧道 JSON
 function argoType() {
 
   if (
@@ -1244,7 +1251,7 @@ function argoType() {
   tunnel: ${ARGO_AUTH.split('"')[11]}
   credentials-file: ${path.join(FILE_PATH, 'tunnel.json')}
   protocol: http2
-  
+
   ingress:
     - hostname: ${ARGO_DOMAIN}
       service: http://localhost:${ARGO_PORT}
@@ -1299,25 +1306,25 @@ async function waitForQuickTunnelLog(
             content
           )
         ) {
+
           return content;
         }
       }
 
     } catch (error) {
+      // 日志可能还没创建
     }
 
     await new Promise(
       resolve =>
-        setTimeout(
-          resolve,
-          1000
-        )
+        setTimeout(resolve, 1000)
     );
   }
 
   return '';
 }
 
+// 获取临时隧道域名
 async function extractDomains() {
 
   let argoDomain;
@@ -1351,25 +1358,23 @@ async function extractDomains() {
 
       const argoDomains = [];
 
-      lines.forEach(
-        line => {
+      lines.forEach(line => {
 
-          const domainMatch =
-            line.match(
-              /https?:\/\/([^ ]*trycloudflare\.com)\/?/
-            );
+        const domainMatch =
+          line.match(
+            /https?:\/\/([^ ]*trycloudflare\.com)\/?/
+          );
 
-          if (domainMatch) {
+        if (domainMatch) {
 
-            const domain =
-              domainMatch[1];
+          const domain =
+            domainMatch[1];
 
-            argoDomains.push(
-              domain
-            );
-          }
+          argoDomains.push(
+            domain
+          );
         }
-      );
+      });
 
       if (
         argoDomains.length > 0
@@ -1393,12 +1398,22 @@ async function extractDomains() {
           'ArgoDomain not found, re-running bot to obtain ArgoDomain'
         );
 
-        fs.unlinkSync(
-          path.join(
-            FILE_PATH,
-            'boot.log'
+        if (
+          fs.existsSync(
+            path.join(
+              FILE_PATH,
+              'boot.log'
+            )
           )
-        );
+        ) {
+
+          fs.unlinkSync(
+            path.join(
+              FILE_PATH,
+              'boot.log'
+            )
+          );
+        }
 
         async function killBotProcess() {
 
@@ -1420,17 +1435,15 @@ async function extractDomains() {
             }
 
           } catch (error) {
+            // 忽略
           }
         }
 
-        killBotProcess();
+        await killBotProcess();
 
         await new Promise(
           resolve =>
-            setTimeout(
-              resolve,
-              3000
-            )
+            setTimeout(resolve, 3000)
         );
 
         const args =
@@ -1448,10 +1461,7 @@ async function extractDomains() {
 
           await new Promise(
             resolve =>
-              setTimeout(
-                resolve,
-                6000
-              )
+              setTimeout(resolve, 6000)
           );
 
           await extractDomains();
@@ -1474,6 +1484,7 @@ async function extractDomains() {
   }
 }
 
+// 获取 ISP 信息
 async function getMetaInfo() {
 
   try {
@@ -1483,9 +1494,9 @@ async function getMetaInfo() {
         'https://api.ip.sb/geoip',
         {
           headers: {
-            'User-Agent': 'Mozilla/5.0',
-            timeout: 3000
-          }
+            'User-Agent': 'Mozilla/5.0'
+          },
+          timeout: 3000
         }
       );
 
@@ -1496,10 +1507,7 @@ async function getMetaInfo() {
     ) {
 
       return `${response1.data.country_code}-${response1.data.isp}`
-        .replace(
-          /\s+/g,
-          '_'
-        );
+        .replace(/\s+/g, '_');
     }
 
   } catch (error) {
@@ -1511,9 +1519,9 @@ async function getMetaInfo() {
           'http://ip-api.com/json',
           {
             headers: {
-              'User-Agent': 'Mozilla/5.0',
-              timeout: 3000
-            }
+              'User-Agent': 'Mozilla/5.0'
+            },
+            timeout: 3000
           }
         );
 
@@ -1525,19 +1533,18 @@ async function getMetaInfo() {
       ) {
 
         return `${response2.data.countryCode}-${response2.data.org}`
-          .replace(
-            /\s+/g,
-            '_'
-          );
+          .replace(/\s+/g, '_');
       }
 
     } catch (error) {
+      // 忽略备用 API 错误
     }
   }
 
   return 'Unknown';
 }
 
+// 获取服务器公网 IP
 async function getServerIP() {
 
   let serverIP = '';
@@ -1563,8 +1570,8 @@ async function getServerIP() {
         execSync(
           'curl -sm 3 ipv4.ip.sb'
         )
-        .toString()
-        .trim();
+          .toString()
+          .trim();
 
     } catch (curlErr) {
 
@@ -1589,8 +1596,8 @@ async function getServerIP() {
             `[${execSync(
               'curl -sm 3 ipv6.ip.sb'
             )
-            .toString()
-            .trim()}]`;
+              .toString()
+              .trim()}]`;
 
         } catch (ipv6CurlErr) {
 
@@ -1606,6 +1613,9 @@ async function getServerIP() {
   return serverIP;
 }
 
+// ============================================================
+// 生成订阅
+// ============================================================
 async function generateLinks(
   argoDomain
 ) {
@@ -1627,16 +1637,21 @@ async function generateLinks(
       setTimeout(
         () => {
 
+          // ====================================================
+          // VLESS + XHTTP + TLS + Cloudflare
+          // ====================================================
           const vlessXhttpNode =
-            `\nvless://${UUID}@${CFIP}:${CFPORT}?encryption=none&security=tls&sni=${argoDomain}&fp=firefox&type=xhttp&host=${argoDomain}&path=%2Fxhttp-argo&mode=auto#${nodeName}`;
+            `vless://${UUID}@${CFIP}:${CFPORT}?encryption=none&security=tls&sni=${argoDomain}&fp=firefox&type=xhttp&host=${argoDomain}&path=%2Fxhttp-argo&mode=auto#${nodeName}`;
 
-          let subTxt =
-            vlessXhttpNode;
+          let subTxt = `
+${vlessXhttpNode}
+`;
 
+          // ====================================================
+          // Hysteria2
+          // ====================================================
           if (
-            isValidPort(
-              HY2_PORT
-            )
+            isValidPort(HY2_PORT)
           ) {
 
             const fingerprint =
@@ -1656,31 +1671,34 @@ async function generateLinks(
               hysteriaNode;
           }
 
+          // ====================================================
+          // VLESS + XHTTP + REALITY
+          //
+          // 注意：
+          // 不使用 flow=xtls-rprx-vision
+          // ====================================================
           if (
-            isValidPort(
-              REALITY_PORT
-            )
+            isValidPort(REALITY_PORT)
           ) {
 
             const vlessNode =
-              `\nvless://${UUID}@${SERVER_IP}:${REALITY_PORT}?encryption=none&flow=xtls-rprx-vision&security=reality&sni=www.iij.ad.jp&fp=firefox&pbk=${publicKey}&type=xhttp&path=%2Fxhttp-reality&mode=auto#${nodeName}`;
+              `\nvless://${UUID}@${SERVER_IP}:${REALITY_PORT}?encryption=none&security=reality&sni=www.iij.ad.jp&fp=firefox&pbk=${publicKey}&type=xhttp&path=%2Fxhttp-reality&mode=auto#${nodeName}`;
 
             subTxt +=
               vlessNode;
           }
 
+          // ====================================================
+          // SOCKS5
+          // ====================================================
           if (
-            isValidPort(
-              S5_PORT
-            )
+            isValidPort(S5_PORT)
           ) {
 
             const S5_AUTH =
               Buffer.from(
                 `${UUID.substring(0, 8)}:${UUID.slice(-12)}`
-              ).toString(
-                'base64'
-              );
+              ).toString('base64');
 
             const s5Node =
               `\nsocks://${S5_AUTH}@${SERVER_IP}:${S5_PORT}#${nodeName}`;
@@ -1692,18 +1710,14 @@ async function generateLinks(
           console.log(
             Buffer.from(
               subTxt
-            ).toString(
-              'base64'
-            )
+            ).toString('base64')
           );
 
           fs.writeFileSync(
             subPath,
             Buffer.from(
               subTxt
-            ).toString(
-              'base64'
-            )
+            ).toString('base64')
           );
 
           fs.writeFileSync(
@@ -1719,9 +1733,7 @@ async function generateLinks(
           subContent =
             Buffer.from(
               subTxt
-            ).toString(
-              'base64'
-            );
+            ).toString('base64');
 
           uploadNodes();
 
@@ -1736,6 +1748,7 @@ async function generateLinks(
   );
 }
 
+// 自动上传节点或订阅
 async function uploadNodes() {
 
   if (
@@ -1747,9 +1760,11 @@ async function uploadNodes() {
       `${PROJECT_URL}/${SUB_PATH}`;
 
     const jsonData = {
+
       subscription: [
         subscriptionUrl
       ]
+
     };
 
     try {
@@ -1786,6 +1801,7 @@ async function uploadNodes() {
         error.response &&
         error.response.status === 400
       ) {
+        // 已存在
       }
     }
 
@@ -1794,9 +1810,7 @@ async function uploadNodes() {
   ) {
 
     if (
-      !fs.existsSync(
-        listPath
-      )
+      !fs.existsSync(listPath)
     ) {
       return;
     }
@@ -1808,12 +1822,13 @@ async function uploadNodes() {
       );
 
     const nodes =
-      content.split('\n').filter(
-        line =>
-          /(vless|vmess|trojan|hysteria2|socks):\/\//.test(
-            line
-          )
-      );
+      content
+        .split('\n')
+        .filter(
+          line =>
+            /(vless|vmess|trojan|hysteria2|socks):\/\//
+              .test(line)
+        );
 
     if (
       nodes.length === 0
@@ -1865,19 +1880,28 @@ async function uploadNodes() {
   }
 }
 
+// 90 秒后删除相关文件
 function cleanFiles() {
 
   setTimeout(
     () => {
 
       const filesToDelete = [
+
         bootLogPath,
+
         configPath,
+
         webPath,
+
         botPath,
+
         listPath,
+
         certPath,
+
         keyPath
+
       ];
 
       if (
@@ -1944,6 +1968,7 @@ function cleanFiles() {
 
 cleanFiles();
 
+// Telegram 推送节点
 async function sendTelegram() {
 
   if (
@@ -2008,6 +2033,7 @@ async function sendTelegram() {
   }
 }
 
+// 自动访问项目 URL
 async function AddVisitTask() {
 
   if (
@@ -2016,7 +2042,7 @@ async function AddVisitTask() {
   ) {
 
     console.log(
-      'Skipping adding automatic access task'
+      "Skipping adding automatic access task"
     );
 
     return;
@@ -2039,7 +2065,7 @@ async function AddVisitTask() {
       );
 
     console.log(
-      'automatic access task added successfully'
+      `automatic access task added successfully`
     );
 
     return response;
@@ -2054,6 +2080,9 @@ async function AddVisitTask() {
   }
 }
 
+// ============================================================
+// 主运行逻辑
+// ============================================================
 async function startserver() {
 
   try {
@@ -2064,6 +2093,7 @@ async function startserver() {
 
     cleanupOldFiles();
 
+    // 生成 Reality 密钥对
     if (
       isValidPort(
         REALITY_PORT
@@ -2073,6 +2103,7 @@ async function startserver() {
       generateOrLoadKeyPair();
     }
 
+    // 生成 HY2 TLS 证书
     if (
       isValidPort(
         HY2_PORT
@@ -2111,9 +2142,13 @@ startserver().catch(
       'Unhandled error in startserver:',
       error
     );
+
   }
 );
 
+// ============================================================
+// HTTP 服务器
+// ============================================================
 const server =
   http.createServer(
     async (req, res) => {
@@ -2121,9 +2156,11 @@ const server =
       const urlPath =
         req.url.split('?')[0];
 
+      // ========================================================
+      // 订阅路由
+      // ========================================================
       if (
-        urlPath ===
-        `/${SUB_PATH}`
+        urlPath === `/${SUB_PATH}`
       ) {
 
         if (
@@ -2183,6 +2220,9 @@ const server =
         return;
       }
 
+      // ========================================================
+      // 根路由
+      // ========================================================
       if (
         urlPath === '/'
       ) {
@@ -2224,7 +2264,7 @@ const server =
           );
 
           res.end(
-            'Hello world!<br><br>You can access /{SUB_PATH}(Default: /sub) to get your nodes!'
+            "Hello world!<br><br>You can access /{SUB_PATH}(Default: /sub) to get your nodes!"
           );
         }
 
@@ -2251,4 +2291,4 @@ server.listen(
     alwaysLog(
       `http server is running on ${PORT}!`
     )
-  );
+);
